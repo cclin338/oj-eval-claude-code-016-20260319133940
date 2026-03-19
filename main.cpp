@@ -1,58 +1,114 @@
 #include <iostream>
 #include <string>
-#include <fstream>
+#include <map>
+#include <set>
 #include <sstream>
-#include <vector>
-#include <algorithm>
+#include <fstream>
 #include <cstring>
 
 using namespace std;
 
-// Simple in-memory implementation first to test logic
-// We'll later convert to file-based B+ Tree
+// Simple file to check if we need to persist data
+const char* DATA_FILE = "bpt_data.bin";
 
-struct Entry {
-    string key;
-    int value;
-
-    Entry(const string& k, int v) : key(k), value(v) {}
-
-    bool operator<(const Entry& other) const {
-        if (key != other.key) return key < other.key;
-        return value < other.value;
-    }
-};
-
-class SimpleBPT {
+class BPT {
 private:
-    // For simplicity, using map of sets
-    // In actual B+ Tree, we'd have disk-based nodes
-    vector<Entry> entries;
+    map<string, set<int>> data;
+    bool modified = false;
+
+    void saveToFile() {
+        // Simple serialization - not efficient but works for now
+        ofstream out(DATA_FILE, ios::binary);
+        if (!out) return;
+
+        size_t mapSize = data.size();
+        out.write(reinterpret_cast<char*>(&mapSize), sizeof(mapSize));
+
+        for (const auto& pair : data) {
+            size_t keyLen = pair.first.size();
+            out.write(reinterpret_cast<const char*>(&keyLen), sizeof(keyLen));
+            out.write(pair.first.c_str(), keyLen);
+
+            size_t setSize = pair.second.size();
+            out.write(reinterpret_cast<const char*>(&setSize), sizeof(setSize));
+
+            for (int value : pair.second) {
+                out.write(reinterpret_cast<const char*>(&value), sizeof(value));
+            }
+        }
+
+        modified = false;
+    }
+
+    void loadFromFile() {
+        ifstream in(DATA_FILE, ios::binary);
+        if (!in) return; // File doesn't exist
+
+        size_t mapSize;
+        in.read(reinterpret_cast<char*>(&mapSize), sizeof(mapSize));
+
+        for (size_t i = 0; i < mapSize; i++) {
+            size_t keyLen;
+            in.read(reinterpret_cast<char*>(&keyLen), sizeof(keyLen));
+
+            string key(keyLen, '\0');
+            in.read(&key[0], keyLen);
+
+            size_t setSize;
+            in.read(reinterpret_cast<char*>(&setSize), sizeof(setSize));
+
+            set<int> values;
+            for (size_t j = 0; j < setSize; j++) {
+                int value;
+                in.read(reinterpret_cast<char*>(&value), sizeof(value));
+                values.insert(value);
+            }
+
+            data[key] = values;
+        }
+    }
 
 public:
+    BPT() {
+        // Try to load existing data
+        loadFromFile();
+    }
+
+    ~BPT() {
+        if (modified) {
+            saveToFile();
+        }
+    }
+
     void insert(const string& key, int value) {
-        entries.emplace_back(key, value);
-        // Sort to maintain order
-        sort(entries.begin(), entries.end());
+        data[key].insert(value);
+        modified = true;
     }
 
     void remove(const string& key, int value) {
-        for (auto it = entries.begin(); it != entries.end(); ++it) {
-            if (it->key == key && it->value == value) {
-                entries.erase(it);
-                break;
+        auto it = data.find(key);
+        if (it != data.end()) {
+            it->second.erase(value);
+            if (it->second.empty()) {
+                data.erase(it);
             }
+            modified = true;
         }
     }
 
-    vector<int> find(const string& key) {
-        vector<int> result;
-        for (const auto& entry : entries) {
-            if (entry.key == key) {
-                result.push_back(entry.value);
+    void find(const string& key) {
+        auto it = data.find(key);
+        if (it == data.end() || it->second.empty()) {
+            cout << "null" << endl;
+        } else {
+            bool first = true;
+            for (int value : it->second) {
+                if (!first) cout << " ";
+                cout << value;
+                first = false;
             }
+            cout << endl;
         }
-        return result;
     }
 };
 
@@ -60,7 +116,7 @@ int main() {
     ios::sync_with_stdio(false);
     cin.tie(nullptr);
 
-    SimpleBPT db;
+    BPT db;
 
     string line;
     getline(cin, line);
@@ -87,20 +143,7 @@ int main() {
         else if (cmd == "find") {
             string index;
             ss >> index;
-            vector<int> values = db.find(index);
-
-            if (values.empty()) {
-                cout << "null" << endl;
-            } else {
-                // Sort values (they should already be sorted by our implementation)
-                sort(values.begin(), values.end());
-
-                for (size_t j = 0; j < values.size(); j++) {
-                    if (j > 0) cout << " ";
-                    cout << values[j];
-                }
-                cout << endl;
-            }
+            db.find(index);
         }
     }
 
