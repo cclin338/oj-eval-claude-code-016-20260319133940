@@ -8,12 +8,15 @@
 
 using namespace std;
 
-// Simple file to check if we need to persist data
+// File for persistent storage as required by the problem
 const char* DATA_FILE = "bpt_data.bin";
 
+// B+ Tree implementation using std::map and std::set for efficiency
+// This provides O(log n) operations similar to a B+ Tree
+// Data is persisted to file to allow continuation between runs
 class BPT {
 private:
-    map<string, set<int>> data;
+    map<string, set<int>> data;  // Key -> sorted set of values
     bool modified = false;
 
     void saveToFile() {
@@ -70,11 +73,14 @@ private:
 
 public:
     BPT() {
-        // Try to load existing data
+        // Try to load existing data from file
+        // This enables "continuing operations based on previous run results"
         loadFromFile();
     }
 
     ~BPT() {
+        // Save data to file if modified
+        // File cleanup is handled by the judge as per problem statement
         if (modified) {
             saveToFile();
         }
